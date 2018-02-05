@@ -2,7 +2,7 @@
 
 ```
 usage: gricleaner.py [-h] [-i FILE] [-r namespace/project] [-m X] [-d X]
-                     [--clean-all] [--dry-run] [--debug]
+                     [--clean-all] [--dry-run] [-v] [--debug]
 
 Utility to remove Docker images from the Gitlab registry
 
@@ -15,6 +15,7 @@ optional arguments:
   -d X, --days X        delete images older than this time (overrides INI value)
   --clean-all           delete all images in repository (DANGER!)
   --dry-run             not delete actually
+  -v, --verbose         verbose mode
   --debug               debug output
 
 To work requires settings in the INI file

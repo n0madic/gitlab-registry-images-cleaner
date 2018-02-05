@@ -8,7 +8,7 @@ import requests
 class GitlabRegistryClient(object):
     """Client for Gitlab registry"""
 
-    tokens = dict() # Cache for bearer tokens
+    tokens = dict()  # Cache for bearer tokens
 
     def get_bearer(self, scope):
         """Return bearer token from Gitlab jwt"""
@@ -126,15 +126,19 @@ if __name__ == "__main__":
         help="delete all images in repository (DANGER!)")
     parser.add_argument(
         "--dry-run", action="store_true", help="not delete actually")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="verbose mode")
     parser.add_argument("--debug", action="store_true", help="debug output")
     args = parser.parse_args()
 
     log_format = "[%(asctime)s] %(levelname)-8s %(message)s"
     if args.debug:
         logging.basicConfig(level=logging.DEBUG, format=log_format)
-    else:
+    elif args.verbose:
         logging.basicConfig(level=logging.INFO, format=log_format)
         logging.getLogger("requests").setLevel(logging.WARNING)
+    else:
+        logging.basicConfig(level=logging.WARNING, format=log_format)
 
     if args.ini:
         if os.path.isfile(args.ini):
