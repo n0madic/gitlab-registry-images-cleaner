@@ -111,7 +111,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "-r",
         "--repository",
-        help="scan only this repository",
+        action='append',
+        default=[],
+        help="scan only these repositories (one or more)",
         metavar="namespace/project")
     parser.add_argument(
         "-m",
@@ -171,7 +173,7 @@ if __name__ == "__main__":
     catalog = GRICleaner.get_catalog()
     logging.info("Found {} repositories".format(len(catalog["repositories"])))
     for repository in catalog["repositories"]:
-        if args.repository and repository != args.repository:
+        if args.repository and not repository in args.repository:
             continue
         logging.info("SCAN repository: {}".format(repository))
         tags = GRICleaner.get_tags(repository)

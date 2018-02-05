@@ -10,7 +10,7 @@ optional arguments:
   -h, --help            show this help message and exit
   -i FILE, --ini FILE   use this INI file (default: gricleaner.ini)
   -r namespace/project, --repository namespace/project
-                        scan only this repository
+                        scan only these repositories (one or more)
   -m X, --minimum X     minimum allowed number of images in repository (overrides INI value)
   -d X, --days X        delete images older than this time (overrides INI value)
   --clean-all           delete all images in repository (DANGER!)
