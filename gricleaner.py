@@ -8,16 +8,18 @@ import requests
 class GitlabRegistryClient(object):
     """Client for Gitlab registry"""
 
+    tokens = dict() # Cache for bearer tokens
+
     def get_bearer(self, scope):
         """Return bearer token from Gitlab jwt"""
-        if not scope in tokens:
+        if not scope in self.tokens:
             url = "{}/?service=container_registry&scope={}:*".format(
                 self.jwt, scope)
             response = requests.get(url, auth=self.auth)
             response.raise_for_status()
             token = response.json()
-            tokens[scope] = token["token"]
-        return tokens[scope]
+            self.tokens[scope] = token["token"]
+        return self.tokens[scope]
 
     def get_json(self, path, scope):
         """Return JSON from registry"""
@@ -156,7 +158,6 @@ if __name__ == "__main__":
     GRICleaner.dry_run = args.dry_run
 
     today = datetime.datetime.today()
-    tokens = dict()
 
     catalog = GRICleaner.get_catalog()
     logging.info("Found {} repositories".format(len(catalog["repositories"])))
