@@ -8,7 +8,13 @@ import requests
 class GitlabRegistryClient(object):
     """Client for Gitlab registry"""
 
-    tokens = dict()  # Cache for bearer tokens
+    def __init__(self, auth, jwt, registry, dry_run=False):
+        """ Initializing arguments """
+        self.auth = auth
+        self.jwt = jwt
+        self.registry = registry
+        self.dry_run = dry_run
+        self.tokens = dict()  # Cache for bearer tokens
 
     def get_bearer(self, scope):
         """Return bearer token from Gitlab jwt"""
@@ -150,16 +156,15 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read(config_name)
 
-    GRICleaner = GitlabRegistryClient()
-
-    GRICleaner.auth = (config["Gitlab"]["User"], config["Gitlab"]["Password"])
-    GRICleaner.jwt = config["Gitlab"]["JWT URL"]
-    GRICleaner.registry = config["Gitlab"]["Registry URL"]
-    GRICleaner.minimum_images = args.minimum if args.minimum else int(
+    GRICleaner = GitlabRegistryClient(
+        auth=(config["Gitlab"]["User"], config["Gitlab"]["Password"]),
+        jwt=config["Gitlab"]["JWT URL"],
+        registry=config["Gitlab"]["Registry URL"],
+        dry_run=args.dry_run)
+    minimum_images = args.minimum if args.minimum else int(
         config["Cleanup"]["Minimum Images"])
-    GRICleaner.retention_days = args.days if args.days else int(
+    retention_days = args.days if args.days else int(
         config["Cleanup"]["Retention Days"])
-    GRICleaner.dry_run = args.dry_run
 
     today = datetime.datetime.today()
 
@@ -184,7 +189,7 @@ if __name__ == "__main__":
                     logging.debug("Latest ID: {}".format(latest_id))
             else:
                 latest_id = ""
-            if len(tags["tags"]) > GRICleaner.minimum_images:
+            if len(tags["tags"]) > minimum_images:
                 for tag in tags["tags"]:
                     image = GRICleaner.get_image(repository, tag)
                     if image and image["id"] != latest_id:
@@ -194,7 +199,7 @@ if __name__ == "__main__":
                         logging.debug(
                             "Tag {} with image id {} days diff: {}".format(
                                 tag, image["id"], diff.days))
-                        if diff.days > GRICleaner.retention_days:
+                        if diff.days > retention_days:
                             logging.warning(
                                 "- DELETE: {}:{}, Created at {}, ({} days ago)".
                                 format(
