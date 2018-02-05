@@ -157,7 +157,6 @@ if __name__ == "__main__":
 
     today = datetime.datetime.today()
     tokens = dict()
-    docker_content_digest = ""
 
     catalog = GRICleaner.get_catalog()
     logging.info("Found {} repositories".format(len(catalog["repositories"])))
