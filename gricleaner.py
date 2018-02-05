@@ -11,8 +11,8 @@ class GitlabRegistryClient(object):
     def __init__(self, auth, jwt, registry, dry_run=False):
         """ Initializing arguments """
         self.auth = auth
-        self.jwt = jwt
-        self.registry = registry
+        self.jwt = jwt.rstrip('//')
+        self.registry = registry.rstrip('//')
         self.dry_run = dry_run
         self.tokens = dict()  # Cache for bearer tokens
 
