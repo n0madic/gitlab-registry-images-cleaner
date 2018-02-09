@@ -176,8 +176,6 @@ if __name__ == "__main__":
         catalog = GRICleaner.get_catalog()
     logging.info("Found {} repositories".format(len(catalog)))
     for repository in catalog:
-        if args.repository and not repository in args.repository:
-            continue
         logging.info("SCAN repository: {}".format(repository))
         tags = GRICleaner.get_tags(repository)
         logging.debug("Tags ({}): {}".format(len(tags["tags"]), tags["tags"]))
