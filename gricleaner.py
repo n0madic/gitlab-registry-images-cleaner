@@ -42,7 +42,7 @@ class GitlabRegistryClient(object):
 
     def get_catalog(self):
         """Return catalog of repositories from registry"""
-        return self.get_json("/v2/_catalog", "registry:catalog")
+        return self.get_json("/v2/_catalog", "registry:catalog")["repositories"]
 
     def get_tags(self, repo):
         """Return tags of repository from registry"""
@@ -170,9 +170,12 @@ if __name__ == "__main__":
 
     today = datetime.datetime.today()
 
-    catalog = GRICleaner.get_catalog()
-    logging.info("Found {} repositories".format(len(catalog["repositories"])))
-    for repository in catalog["repositories"]:
+    if args.repository:
+        catalog = args.repository
+    else:
+        catalog = GRICleaner.get_catalog()
+    logging.info("Found {} repositories".format(len(catalog)))
+    for repository in catalog:
         if args.repository and not repository in args.repository:
             continue
         logging.info("SCAN repository: {}".format(repository))
