@@ -58,6 +58,9 @@ class GitlabRegistryClient(object):
         """Return image by manifest from registry"""
         manifest = self.get_manifest(repo, tag)
         if "errors" in manifest:
+            if tag != 'latest':
+                logging.info("Image {}:{} not found or already deleted: {}".format(
+                    repo, tag, manifest["errors"][0]["message"]))
             return {}
         else:
             return json.loads(manifest["history"][0]["v1Compatibility"])
@@ -77,7 +80,7 @@ class GitlabRegistryClient(object):
         url = "/v2/{}/manifests/{}".format(repo, self.get_digest(repo, tag))
         logging.debug("Delete URL: {}{}".format(self.registry, url))
         if self.dry_run:
-            logging.info("~ Dry Run!")
+            logging.warning("~ Dry Run!")
         else:
             headers = {
                 "Authorization":
@@ -118,8 +121,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-m",
         "--minimum",
-        help=
-        "minimum allowed number of images in repository (overrides INI value)",
+        help="minimum allowed number of images in repository (overrides INI value)",
         metavar="X",
         type=int)
     parser.add_argument(
@@ -174,6 +176,7 @@ if __name__ == "__main__":
         catalog = args.repository
     else:
         catalog = GRICleaner.get_catalog()
+        logging.debug('Fetched catalog: {}'.format(catalog))
     logging.info("Found {} repositories".format(len(catalog)))
     for repository in catalog:
         logging.info("SCAN repository: {}".format(repository))
