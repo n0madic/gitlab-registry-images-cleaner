@@ -21,7 +21,7 @@ class GitlabRegistryClient(object):
         if not scope in self.tokens:
             url = "{}/?service=container_registry&scope={}:*".format(
                 self.jwt, scope)
-            response = requests.get(url, auth=self.auth)
+            response = requests.get(url, auth=self.auth, verify=requests_verify)
             response.raise_for_status()
             token = response.json()
             self.tokens[scope] = token["token"]
@@ -30,7 +30,7 @@ class GitlabRegistryClient(object):
     def get_json(self, path, scope):
         """Return JSON from registry"""
         headers = {"Authorization": "Bearer " + self.get_bearer(scope)}
-        response = requests.get(self.registry + path, headers=headers)
+        response = requests.get(self.registry + path, headers=headers, verify=requests_verify)
         if response.status_code == 200 or response.status_code == 404:
             json_r = response.json()
             if "errors" in json_r:
@@ -72,7 +72,7 @@ class GitlabRegistryClient(object):
             "Authorization": "Bearer " + self.get_bearer("repository:" + repo),
             "Accept": "application/vnd.docker.distribution.manifest.v2+json"
         }
-        response = requests.head(self.registry + path, headers=headers)
+        response = requests.head(self.registry + path, headers=headers, verify=requests_verify)
         return response.headers["Docker-Content-Digest"]
 
     def delete_image(self, repo, tag):
@@ -86,7 +86,7 @@ class GitlabRegistryClient(object):
                 "Authorization":
                 "Bearer " + self.get_bearer("repository:" + repo)
             }
-            response = requests.delete(self.registry + url, headers=headers)
+            response = requests.delete(self.registry + url, headers=headers, verify=requests_verify)
             if response.status_code == 202:
                 logging.info("+ OK")
             else:
@@ -138,6 +138,8 @@ if __name__ == "__main__":
         "--dry-run", action="store_true", help="not delete actually")
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="verbose mode")
+    parser.add_argument(
+        "-z", "--insecure", action="store_true", help="disable SSL certificate verification")
     parser.add_argument("--debug", action="store_true", help="debug output")
     args = parser.parse_args()
 
@@ -156,6 +158,13 @@ if __name__ == "__main__":
         else:
             logging.critical("Config {} not found!".format(args.ini))
             sys.exit(1)
+
+    if args.insecure:
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        requests_verify = False
+    else:
+        requests_verify = True
 
     config = configparser.ConfigParser()
     config.read(config_name)
