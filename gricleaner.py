@@ -119,6 +119,11 @@ if __name__ == "__main__":
         help="scan only these repositories (one or more)",
         metavar="namespace/project")
     parser.add_argument(
+        "-t",
+        "--tag-match",
+        help="only consider tags containing the string",
+        metavar="SNAPSHOT")
+    parser.add_argument(
         "-m",
         "--minimum",
         help="minimum allowed number of images in repository (overrides INI value)",
@@ -189,11 +194,27 @@ if __name__ == "__main__":
     logging.info("Found {} repositories".format(len(catalog)))
     for repository in catalog:
         logging.info("SCAN repository: {}".format(repository))
-        tags = GRICleaner.get_tags(repository)
+        try:
+            tags = GRICleaner.get_tags(repository)
+        except requests.exceptions.HTTPError as e:
+            logging.warning("Encountered a HTTP error when trying to access repository {}\n{}".format(repository, e))
+            continue
+
+        if not tags["tags"]:
+            logging.warning("Found no tags for repository {}".format(repository))
+            continue
+
         logging.debug("Tags ({}): {}".format(len(tags["tags"]), tags["tags"]))
+
+        if args.tag_match:
+            filtered_tags = [i for i in tags["tags"] if args.tag_match in i]
+            logging.debug("Filtered Tags ({}): {}".format(len(filtered_tags), filtered_tags))
+        else:
+            filtered_tags = tags["tags"]
+
         if args.clean_all:
             logging.warning("!!! CLEAN ALL IMAGES !!!")
-            for tag in tags["tags"]:
+            for tag in filtered_tags:
                 logging.warning("- DELETE: {}:{}".format(repository, tag))
                 GRICleaner.delete_image(repository, tag)
         else:
@@ -204,8 +225,8 @@ if __name__ == "__main__":
                     logging.debug("Latest ID: {}".format(latest_id))
             else:
                 latest_id = ""
-            if len(tags["tags"]) > minimum_images:
-                for tag in tags["tags"]:
+            if len(filtered_tags) > minimum_images:
+                for tag in filtered_tags:
                     image = GRICleaner.get_image(repository, tag)
                     if image and image["id"] != latest_id:
                         created = dateutil.parser.parse(
