@@ -21,7 +21,7 @@ class GitlabRegistryClient(object):
         if not scope in self.tokens:
             url = "{}/?service=container_registry&scope={}:*".format(
                 self.jwt, scope)
-            response = requests.get(url, auth=self.auth)
+            response = requests.get(url, auth=self.auth, verify=requests_verify)
             response.raise_for_status()
             token = response.json()
             self.tokens[scope] = token["token"]
@@ -30,7 +30,7 @@ class GitlabRegistryClient(object):
     def get_json(self, path, scope):
         """Return JSON from registry"""
         headers = {"Authorization": "Bearer " + self.get_bearer(scope)}
-        response = requests.get(self.registry + path, headers=headers)
+        response = requests.get(self.registry + path, headers=headers, verify=requests_verify)
         if response.status_code == 200 or response.status_code == 404:
             json_r = response.json()
             if "errors" in json_r:
@@ -72,7 +72,7 @@ class GitlabRegistryClient(object):
             "Authorization": "Bearer " + self.get_bearer("repository:" + repo),
             "Accept": "application/vnd.docker.distribution.manifest.v2+json"
         }
-        response = requests.head(self.registry + path, headers=headers)
+        response = requests.head(self.registry + path, headers=headers, verify=requests_verify)
         return response.headers["Docker-Content-Digest"]
 
     def delete_image(self, repo, tag):
@@ -86,7 +86,7 @@ class GitlabRegistryClient(object):
                 "Authorization":
                 "Bearer " + self.get_bearer("repository:" + repo)
             }
-            response = requests.delete(self.registry + url, headers=headers)
+            response = requests.delete(self.registry + url, headers=headers, verify=requests_verify)
             if response.status_code == 202:
                 logging.info("+ OK")
             else:
@@ -119,6 +119,11 @@ if __name__ == "__main__":
         help="scan only these repositories (one or more)",
         metavar="namespace/project")
     parser.add_argument(
+        "-t",
+        "--tag-match",
+        help="only consider tags containing the string",
+        metavar="SNAPSHOT")
+    parser.add_argument(
         "-m",
         "--minimum",
         help="minimum allowed number of images in repository (overrides INI value)",
@@ -138,6 +143,8 @@ if __name__ == "__main__":
         "--dry-run", action="store_true", help="not delete actually")
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="verbose mode")
+    parser.add_argument(
+        "-z", "--insecure", action="store_true", help="disable SSL certificate verification")
     parser.add_argument("--debug", action="store_true", help="debug output")
     args = parser.parse_args()
 
@@ -156,6 +163,13 @@ if __name__ == "__main__":
         else:
             logging.critical("Config {} not found!".format(args.ini))
             sys.exit(1)
+
+    if args.insecure:
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        requests_verify = False
+    else:
+        requests_verify = True
 
     config = configparser.ConfigParser()
     config.read(config_name)
@@ -180,11 +194,27 @@ if __name__ == "__main__":
     logging.info("Found {} repositories".format(len(catalog)))
     for repository in catalog:
         logging.info("SCAN repository: {}".format(repository))
-        tags = GRICleaner.get_tags(repository)
+        try:
+            tags = GRICleaner.get_tags(repository)
+        except requests.exceptions.HTTPError as e:
+            logging.warning("Encountered a HTTP error when trying to access repository {}\n{}".format(repository, e))
+            continue
+
+        if not tags["tags"]:
+            logging.warning("Found no tags for repository {}".format(repository))
+            continue
+
         logging.debug("Tags ({}): {}".format(len(tags["tags"]), tags["tags"]))
+
+        if args.tag_match:
+            filtered_tags = [i for i in tags["tags"] if args.tag_match in i]
+            logging.debug("Filtered Tags ({}): {}".format(len(filtered_tags), filtered_tags))
+        else:
+            filtered_tags = tags["tags"]
+
         if args.clean_all:
             logging.warning("!!! CLEAN ALL IMAGES !!!")
-            for tag in tags["tags"]:
+            for tag in filtered_tags:
                 logging.warning("- DELETE: {}:{}".format(repository, tag))
                 GRICleaner.delete_image(repository, tag)
         else:
@@ -195,8 +225,8 @@ if __name__ == "__main__":
                     logging.debug("Latest ID: {}".format(latest_id))
             else:
                 latest_id = ""
-            if len(tags["tags"]) > minimum_images:
-                for tag in tags["tags"]:
+            if len(filtered_tags) > minimum_images:
+                for tag in filtered_tags:
                     image = GRICleaner.get_image(repository, tag)
                     if image and image["id"] != latest_id:
                         created = dateutil.parser.parse(
