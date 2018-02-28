@@ -8,20 +8,20 @@ import requests
 class GitlabRegistryClient(object):
     """Client for Gitlab registry"""
 
-    def __init__(self, auth, jwt, registry, dry_run=False):
+    def __init__(self, auth, jwt, registry, requests_verify=True, dry_run=False):
         """ Initializing arguments """
         self.auth = auth
         self.jwt = jwt.rstrip('//')
         self.registry = registry.rstrip('//')
+        self.requests_verify = requests_verify
         self.dry_run = dry_run
         self.tokens = dict()  # Cache for bearer tokens
 
     def get_bearer(self, scope):
         """Return bearer token from Gitlab jwt"""
-        if not scope in self.tokens:
-            url = "{}/?service=container_registry&scope={}:*".format(
-                self.jwt, scope)
-            response = requests.get(url, auth=self.auth, verify=requests_verify)
+        if scope not in self.tokens:
+            url = "{}/?service=container_registry&scope={}:*".format(self.jwt, scope)
+            response = requests.get(url, auth=self.auth, verify=self.requests_verify)
             response.raise_for_status()
             token = response.json()
             self.tokens[scope] = token["token"]
@@ -30,7 +30,7 @@ class GitlabRegistryClient(object):
     def get_json(self, path, scope):
         """Return JSON from registry"""
         headers = {"Authorization": "Bearer " + self.get_bearer(scope)}
-        response = requests.get(self.registry + path, headers=headers, verify=requests_verify)
+        response = requests.get(self.registry + path, headers=headers, verify=self.requests_verify)
         if response.status_code == 200 or response.status_code == 404:
             json_r = response.json()
             if "errors" in json_r:
@@ -72,7 +72,7 @@ class GitlabRegistryClient(object):
             "Authorization": "Bearer " + self.get_bearer("repository:" + repo),
             "Accept": "application/vnd.docker.distribution.manifest.v2+json"
         }
-        response = requests.head(self.registry + path, headers=headers, verify=requests_verify)
+        response = requests.head(self.registry + path, headers=headers, verify=self.requests_verify)
         return response.headers["Docker-Content-Digest"]
 
     def delete_image(self, repo, tag):
@@ -83,10 +83,9 @@ class GitlabRegistryClient(object):
             logging.warning("~ Dry Run!")
         else:
             headers = {
-                "Authorization":
-                "Bearer " + self.get_bearer("repository:" + repo)
+                "Authorization": "Bearer " + self.get_bearer("repository:" + repo)
             }
-            response = requests.delete(self.registry + url, headers=headers, verify=requests_verify)
+            response = requests.delete(self.registry + url, headers=headers, verify=self.requests_verify)
             if response.status_code == 202:
                 logging.info("+ OK")
             else:
@@ -166,10 +165,8 @@ if __name__ == "__main__":
 
     if args.insecure:
         import urllib3
+
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        requests_verify = False
-    else:
-        requests_verify = True
 
     config = configparser.ConfigParser()
     config.read(config_name)
@@ -178,11 +175,10 @@ if __name__ == "__main__":
         auth=(config["Gitlab"]["User"], config["Gitlab"]["Password"]),
         jwt=config["Gitlab"]["JWT URL"],
         registry=config["Gitlab"]["Registry URL"],
+        requests_verify=not args.insecure,
         dry_run=args.dry_run)
-    minimum_images = args.minimum if args.minimum else int(
-        config["Cleanup"]["Minimum Images"])
-    retention_days = args.days if args.days else int(
-        config["Cleanup"]["Retention Days"])
+    minimum_images = args.minimum if args.minimum else int(config["Cleanup"]["Minimum Images"])
+    retention_days = args.days if args.days else int(config["Cleanup"]["Retention Days"])
 
     today = datetime.datetime.today()
 
@@ -229,18 +225,13 @@ if __name__ == "__main__":
                 for tag in filtered_tags:
                     image = GRICleaner.get_image(repository, tag)
                     if image and image["id"] != latest_id:
-                        created = dateutil.parser.parse(
-                            image["created"]).replace(tzinfo=None)
+                        created = dateutil.parser.parse(image["created"]).replace(tzinfo=None)
                         diff = today - created
-                        logging.debug(
-                            "Tag {} with image id {} days diff: {}".format(
-                                tag, image["id"], diff.days))
+                        logging.debug("Tag {} with image id {} days diff: {}".format(tag, image["id"], diff.days))
                         if diff.days > retention_days:
-                            logging.warning(
-                                "- DELETE: {}:{}, Created at {}, ({} days ago)".
-                                format(
-                                    repository,
-                                    tag,
-                                    created.replace(microsecond=0),
-                                    diff.days))
+                            logging.warning("- DELETE: {}:{}, Created at {}, ({} days ago)".
+                                            format(repository,
+                                                   tag,
+                                                   created.replace(microsecond=0),
+                                                   diff.days))
                             GRICleaner.delete_image(repository, tag)
