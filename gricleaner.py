@@ -164,9 +164,7 @@ if __name__ == "__main__":
             sys.exit(1)
 
     if args.insecure:
-        import urllib3
-
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        requests.packages.urllib3.disable_warnings()
 
     config = configparser.ConfigParser()
     config.read(config_name)
