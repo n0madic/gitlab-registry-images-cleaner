@@ -194,7 +194,7 @@ if __name__ == "__main__":
             logging.warning("Encountered a HTTP error when trying to access repository {}\n{}".format(repository, e))
             continue
 
-        if not tags["tags"]:
+        if not tags.get("tags"):
             logging.warning("Found no tags for repository {}".format(repository))
             continue
 
