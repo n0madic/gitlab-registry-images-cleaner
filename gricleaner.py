@@ -195,7 +195,7 @@ if __name__ == "__main__":
             continue
 
         if not tags.get("tags"):
-            logging.warning("Found no tags for repository {}".format(repository))
+            logging.warning("No tags found for repository {}".format(repository))
             continue
 
         logging.debug("Tags ({}): {}".format(len(tags["tags"]), tags["tags"]))
