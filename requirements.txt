@@ -1,2 +1,3 @@
 configparser
+python-dateutil
 requests
