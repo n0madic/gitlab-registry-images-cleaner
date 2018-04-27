@@ -103,13 +103,33 @@ if __name__ == "__main__":
     config_name = os.path.basename(__file__).replace(".py", ".ini")
     parser = argparse.ArgumentParser(
         description="Utility to remove Docker images from the Gitlab registry",
-        epilog="To work requires settings in the INI file",
+        epilog="To work requires settings in the INI file or environment variables",
         formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument(
         "-i",
         "--ini",
         help="use this INI file (default: {})".format(config_name),
         metavar="FILE")
+    parser.add_argument(
+        "-j",
+        "--jwt",
+        help="Gitlab JWT authentication url. Or use $GITLAB_JWT_URL. (overrides INI value)",
+        metavar="URL")
+    parser.add_argument(
+        "-u",
+        "--user",
+        help="Gitlab admin username. Or use $GITLAB_USER. (overrides INI value)",
+        metavar="NAME")
+    parser.add_argument(
+        "-p",
+        "--password",
+        help="Gitlab admin password. NOT SAFE! Or use $GITLAB_PASSWORD. (overrides INI value)",
+        metavar="SECRET")
+    parser.add_argument(
+        "-g",
+        "--registry",
+        help="Gitlab docker registry url. Or use $GITLAB_REGISTRY. (overrides INI value)",
+        metavar="URL")
     parser.add_argument(
         "-r",
         "--repository",
@@ -157,27 +177,38 @@ if __name__ == "__main__":
         logging.basicConfig(level=logging.WARNING, format=log_format)
 
     if args.ini:
-        if os.path.isfile(args.ini):
-            config_name = args.ini
-        else:
-            logging.critical("Config {} not found!".format(args.ini))
-            sys.exit(1)
+        config_name = args.ini
+
+    config = configparser.ConfigParser()
+    if os.path.isfile(config_name):
+        config.read(config_name)
+    elif args.ini:
+        logging.critical("Config {} not found!".format(args.ini))
+        sys.exit(1)
 
     if args.insecure:
         requests.packages.urllib3.disable_warnings()
 
-    config = configparser.ConfigParser()
-    config.read(config_name)
-
-    if os.getenv('CI_JOB_TOKEN'):
+    if args.user or os.getenv('GITLAB_USER') or args.password or os.getenv('GITLAB_PASSWORD'):
+        authentication = (
+            args.user if args.user else os.getenv('GITLAB_USER'),
+            args.password if args.password else os.getenv('GITLAB_PASSWORD')
+        )
+    elif os.getenv('CI_JOB_TOKEN'):
         authentication = ('gitlab-ci-token', os.getenv('CI_JOB_TOKEN'))
     else:
         authentication = (config["Gitlab"]["User"], config["Gitlab"]["Password"])
 
+    jwt_url = args.jwt if args.jwt \
+        else os.getenv('GITLAB_JWT_URL', config["Gitlab"]["JWT URL"])
+    registry_url = args.registry if args.registry \
+        else os.getenv('GITLAB_REGISTRY', os.getenv('CI_REGISTRY', config["Gitlab"]["Registry URL"]))
+    registry_url = 'https://'+registry_url if not registry_url.startswith('http') else registry_url
+
     GRICleaner = GitlabRegistryClient(
         auth=authentication,
-        jwt=config["Gitlab"]["JWT URL"],
-        registry=config["Gitlab"]["Registry URL"],
+        jwt=jwt_url,
+        registry=registry_url,
         requests_verify=not args.insecure,
         dry_run=args.dry_run)
     minimum_images = args.minimum if args.minimum else int(config["Cleanup"]["Minimum Images"])
