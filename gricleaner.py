@@ -169,8 +169,13 @@ if __name__ == "__main__":
     config = configparser.ConfigParser()
     config.read(config_name)
 
+    if os.getenv('CI_JOB_TOKEN'):
+        authentication = ('gitlab-ci-token', os.getenv('CI_JOB_TOKEN'))
+    else:
+        authentication = (config["Gitlab"]["User"], config["Gitlab"]["Password"])
+
     GRICleaner = GitlabRegistryClient(
-        auth=(config["Gitlab"]["User"], config["Gitlab"]["Password"]),
+        auth=authentication,
         jwt=config["Gitlab"]["JWT URL"],
         registry=config["Gitlab"]["Registry URL"],
         requests_verify=not args.insecure,
