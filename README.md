@@ -19,7 +19,7 @@ optional arguments:
   -r namespace/project, --repository namespace/project
                         scan only these repositories (one or more)
   -t SNAPSHOT, --tag-match SNAPSHOT
-                        only consider tags containing the string
+                        only consider tags containing the string or regex
   -m X, --minimum X     minimum allowed number of images in repository (overrides INI value)
   -d X, --days X        delete images older than this time (overrides INI value)
   --clean-all           delete all images in repository (DANGER!)
