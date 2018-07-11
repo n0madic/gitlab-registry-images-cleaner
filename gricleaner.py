@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import re
 import logging
 import json
 import requests
@@ -237,7 +238,7 @@ if __name__ == "__main__":
         logging.debug("Tags ({}): {}".format(len(tags["tags"]), tags["tags"]))
 
         if args.tag_match:
-            filtered_tags = [i for i in tags["tags"] if args.tag_match in i]
+            filtered_tags = [i for i in tags["tags"] if args.tag_match in i or re.search(args.tag_match, i)]
             logging.debug("Filtered Tags ({}): {}".format(len(filtered_tags), filtered_tags))
         else:
             filtered_tags = tags["tags"]
