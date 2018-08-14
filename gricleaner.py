@@ -61,7 +61,7 @@ class GitlabRegistryClient(object):
         manifest = self.get_manifest(repo, tag)
         if "errors" in manifest:
             if tag != 'latest':
-                logging.info("Image {}:{} not found or already deleted: {}".format(
+                logging.warning("Image {}:{} not found or already deleted: {}".format(
                     repo, tag, manifest["errors"][0]["message"]))
             return {}
         else:
@@ -75,24 +75,27 @@ class GitlabRegistryClient(object):
             "Accept": "application/vnd.docker.distribution.manifest.v2+json"
         }
         response = requests.head(self.registry + path, headers=headers, verify=self.requests_verify)
-        return response.headers["Docker-Content-Digest"]
+        return response.headers.get("Docker-Content-Digest", False)
 
     def delete_image(self, repo, tag):
         """Delete image by tag from registry"""
-        url = "/v2/{}/manifests/{}".format(repo, self.get_digest(repo, tag))
-        logging.debug("Delete URL: {}{}".format(self.registry, url))
-        if self.dry_run:
-            logging.warning("~ Dry Run!")
-        else:
-            headers = {
-                "Authorization": "Bearer " + self.get_bearer("repository:" + repo)
-            }
-            response = requests.delete(self.registry + url, headers=headers, verify=self.requests_verify)
-            if response.status_code == 202:
-                logging.info("+ OK")
+        digest = self.get_digest(repo, tag)
+        if digest:
+            url = "/v2/{}/manifests/{}".format(repo, digest)
+            logging.debug("Delete URL: {}{}".format(self.registry, url))
+            if self.dry_run:
+                logging.warning("~ Dry Run!")
             else:
-                logging.error(response.text)
-
+                headers = {
+                    "Authorization": "Bearer " + self.get_bearer("repository:" + repo)
+                }
+                response = requests.delete(self.registry + url, headers=headers, verify=self.requests_verify)
+                if response.status_code == 202:
+                    logging.info("+ OK")
+                else:
+                    logging.error(response.text)
+        else:
+            logging.warning("Digest for image {}:{} not found or image already deleted".format(repo, tag))
 
 if __name__ == "__main__":
     import argparse
