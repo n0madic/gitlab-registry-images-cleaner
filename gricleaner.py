@@ -4,7 +4,6 @@ import re
 import logging
 import json
 import requests
-import time
 
 
 class GitlabRegistryClient(object):
@@ -75,27 +74,24 @@ class GitlabRegistryClient(object):
             "Accept": "application/vnd.docker.distribution.manifest.v2+json"
         }
         response = requests.head(self.registry + path, headers=headers, verify=self.requests_verify)
-        return response.headers.get("Docker-Content-Digest", False)
+        return response.headers["Docker-Content-Digest"]
 
     def delete_image(self, repo, tag):
         """Delete image by tag from registry"""
-        digest = self.get_digest(repo, tag)
-        if digest:
-            url = "/v2/{}/manifests/{}".format(repo, digest)
-            logging.debug("Delete URL: {}{}".format(self.registry, url))
-            if self.dry_run:
-                logging.warning("~ Dry Run!")
-            else:
-                headers = {
-                    "Authorization": "Bearer " + self.get_bearer("repository:" + repo)
-                }
-                response = requests.delete(self.registry + url, headers=headers, verify=self.requests_verify)
-                if response.status_code == 202:
-                    logging.info("+ OK")
-                else:
-                    logging.error(response.text)
+        url = "/v2/{}/manifests/{}".format(repo, self.get_digest(repo, tag))
+        logging.debug("Delete URL: {}{}".format(self.registry, url))
+        if self.dry_run:
+            logging.warning("~ Dry Run!")
         else:
-            logging.warning("Digest for image {}:{} not found or image already deleted".format(repo, tag))
+            headers = {
+                "Authorization": "Bearer " + self.get_bearer("repository:" + repo)
+            }
+            response = requests.delete(self.registry + url, headers=headers, verify=self.requests_verify)
+            if response.status_code == 202:
+                logging.info("+ OK")
+            else:
+                logging.error(response.text)
+
 
 if __name__ == "__main__":
     import argparse
@@ -259,23 +255,18 @@ if __name__ == "__main__":
                 logging.debug("Latest ID: {}".format(latest_id))
             else:
                 latest_id = ""
-
-            images = []
-            for tag in filtered_tags:
-                image = GRICleaner.get_image(repository, tag)
-                image["tag"] = tag
-                images.append(image)
-
-            for image in sorted(images, key=lambda i: int(time.mktime(dateutil.parser.parse(i["created"]).timetuple()))):
-                if len(images) > minimum_images and image["id"] != latest_id:
-                    created = dateutil.parser.parse(image["created"]).replace(tzinfo=None)
-                    diff = today - created
-                    logging.debug("Tag {} with image id {} days diff: {}".format(image["tag"], image["id"], diff.days))
-                    if diff.days > retention_days:
-                        logging.warning("- DELETE: {}:{}, Created at {} ({} days ago)".
-                                        format(repository,
-                                                image["tag"],
-                                                created.replace(microsecond=0),
-                                                diff.days))
-                        GRICleaner.delete_image(repository, image["tag"])
-                        images.remove(image)
+            for tag in list(filtered_tags):
+                if len(filtered_tags) > minimum_images:
+                    image = GRICleaner.get_image(repository, tag)
+                    if image and image["id"] != latest_id:
+                        created = dateutil.parser.parse(image["created"]).replace(tzinfo=None)
+                        diff = today - created
+                        logging.debug("Tag {} with image id {} days diff: {}".format(tag, image["id"], diff.days))
+                        if diff.days > retention_days:
+                            logging.warning("- DELETE: {}:{}, Created at {} ({} days ago)".
+                                            format(repository,
+                                                   tag,
+                                                   created.replace(microsecond=0),
+                                                   diff.days))
+                            GRICleaner.delete_image(repository, tag)
+                            filtered_tags.remove(tag)
