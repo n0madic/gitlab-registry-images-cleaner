@@ -267,6 +267,9 @@ if __name__ == "__main__":
                 images.append(image)
 
             for image in sorted(images, key=lambda i: int(time.mktime(dateutil.parser.parse(i["created"]).timetuple()))):
+                if image["id"] in [item["id"] for item in images]:
+                    images.remove(image)
+                    continue
                 if len(images) > minimum_images and image["id"] != latest_id:
                     created = dateutil.parser.parse(image["created"]).replace(tzinfo=None)
                     diff = today - created
