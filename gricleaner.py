@@ -249,12 +249,11 @@ if __name__ == "__main__":
             for tag in filtered_tags:
                 logging.warning("- DELETE: {}:{}".format(repository, tag))
                 GRICleaner.delete_image(repository, tag)
-        else:
+        elif len(filtered_tags) > minimum_images:
             latest = GRICleaner.get_image(repository, "latest")
             if "id" in latest:
                 latest_id = latest["id"]
-                if args.debug:
-                    logging.debug("Latest ID: {}".format(latest_id))
+                logging.debug("Latest ID: {}".format(latest_id))
             else:
                 latest_id = ""
 
@@ -264,20 +263,16 @@ if __name__ == "__main__":
                 image["tag"] = tag
                 images.append(image)
 
-            images.sort(key=lambda i: int(time.mktime(dateutil.parser.parse(i["created"]).timetuple())))
-
-            for image in images:
-                if len(images) <= minimum_images:
-                    break
-
-                created = dateutil.parser.parse(image["created"]).replace(tzinfo=None)
-                diff = today - created
-                logging.debug("Tag {} with image id {} days diff: {}".format(image["tag"], image["id"], diff.days))
-                if diff.days > retention_days:
-                    logging.warning("- DELETE: {}:{}, Created at {}, ({} days ago)".
-                                    format(repository,
-                                            image["tag"],
-                                            created.replace(microsecond=0),
-                                            diff.days))
-                    GRICleaner.delete_image(repository, image["tag"])
-                images.remove(image)
+            for image in sorted(images, key=lambda i: int(time.mktime(dateutil.parser.parse(i["created"]).timetuple()))):
+                if len(images) > minimum_images and image["id"] != latest_id:
+                    created = dateutil.parser.parse(image["created"]).replace(tzinfo=None)
+                    diff = today - created
+                    logging.debug("Tag {} with image id {} days diff: {}".format(image["tag"], image["id"], diff.days))
+                    if diff.days > retention_days:
+                        logging.warning("- DELETE: {}:{}, Created at {} ({} days ago)".
+                                        format(repository,
+                                                image["tag"],
+                                                created.replace(microsecond=0),
+                                                diff.days))
+                        GRICleaner.delete_image(repository, image["tag"])
+                        images.remove(image)
