@@ -77,25 +77,22 @@ class GitlabRegistryClient(object):
         response = requests.head(self.registry + path, headers=headers, verify=self.requests_verify)
         return response.headers.get("Docker-Content-Digest", False)
 
-    def delete_image(self, repo, tag):
+    def delete_image(self, repo, digest):
         """Delete image by tag from registry"""
-        digest = self.get_digest(repo, tag)
-        if digest:
-            url = "/v2/{}/manifests/{}".format(repo, digest)
-            logging.debug("Delete URL: {}{}".format(self.registry, url))
-            if self.dry_run:
-                logging.warning("~ Dry Run!")
-            else:
-                headers = {
-                    "Authorization": "Bearer " + self.get_bearer("repository:" + repo)
-                }
-                response = requests.delete(self.registry + url, headers=headers, verify=self.requests_verify)
-                if response.status_code == 202:
-                    logging.info("+ OK")
-                else:
-                    logging.error(response.text)
+        url = "/v2/{}/manifests/{}".format(repo, digest)
+        logging.debug("Delete URL: {}{}".format(self.registry, url))
+        if self.dry_run:
+            logging.warning("~ Dry Run!")
         else:
-            logging.warning("Digest for image {}:{} not found or image already deleted".format(repo, tag))
+            headers = {
+                "Authorization": "Bearer " + self.get_bearer("repository:" + repo)
+            }
+            response = requests.delete(self.registry + url, headers=headers, verify=self.requests_verify)
+            if response.status_code == 202:
+                logging.info("+ OK")
+            else:
+                logging.error(response.text)
+
 
 if __name__ == "__main__":
     import argparse
@@ -208,7 +205,7 @@ if __name__ == "__main__":
         else os.getenv('GITLAB_JWT_URL', config["Gitlab"]["JWT URL"])
     registry_url = args.registry if args.registry \
         else os.getenv('GITLAB_REGISTRY', os.getenv('CI_REGISTRY', config["Gitlab"]["Registry URL"]))
-    registry_url = 'https://'+registry_url if not registry_url.startswith('http') else registry_url
+    registry_url = 'https://' + registry_url if not registry_url.startswith('http') else registry_url
 
     GRICleaner = GitlabRegistryClient(
         auth=authentication,
@@ -251,7 +248,7 @@ if __name__ == "__main__":
             logging.warning("!!! CLEAN ALL IMAGES !!!")
             for tag in filtered_tags:
                 logging.warning("- DELETE: {}:{}".format(repository, tag))
-                GRICleaner.delete_image(repository, tag)
+                GRICleaner.delete_image(repository, GRICleaner.get_digest(repository, tag))
         elif len(filtered_tags) > minimum_images:
             latest = GRICleaner.get_image(repository, "latest")
             if "id" in latest:
@@ -263,22 +260,25 @@ if __name__ == "__main__":
             images = []
             for tag in filtered_tags:
                 image = GRICleaner.get_image(repository, tag)
-                image["tag"] = tag
-                images.append(image)
+                if "created" in image:
+                    image["tag"] = tag
+                    images.append(image)
 
-            for image in sorted(images, key=lambda i: int(time.mktime(dateutil.parser.parse(i["created"]).timetuple()))):
-                if image["id"] in [item["id"] for item in images]:
-                    images.remove(image)
-                    continue
+            digests_for_deletion = []
+            for image in sorted(images,
+                                key=lambda i: int(time.mktime(dateutil.parser.parse(i["created"]).timetuple()))):
                 if len(images) > minimum_images and image["id"] != latest_id:
                     created = dateutil.parser.parse(image["created"]).replace(tzinfo=None)
                     diff = today - created
                     logging.debug("Tag {} with image id {} days diff: {}".format(image["tag"], image["id"], diff.days))
                     if diff.days > retention_days:
-                        logging.warning("- DELETE: {}:{}, Created at {} ({} days ago)".
+                        digests_for_deletion.append(GRICleaner.get_digest(repository, image["tag"]))
+                        logging.warning("- Prepare to DELETE: {}:{}, Created at {} ({} days ago)".
                                         format(repository,
-                                                image["tag"],
-                                                created.replace(microsecond=0),
-                                                diff.days))
-                        GRICleaner.delete_image(repository, image["tag"])
+                                               image["tag"],
+                                               created.replace(microsecond=0),
+                                               diff.days))
                         images.remove(image)
+
+            for digest in digests_for_deletion:
+                GRICleaner.delete_image(repository, digest)
