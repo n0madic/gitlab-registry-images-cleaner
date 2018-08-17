@@ -4,7 +4,6 @@ import re
 import logging
 import json
 import requests
-import time
 
 
 class GitlabRegistryClient(object):
@@ -75,7 +74,7 @@ class GitlabRegistryClient(object):
             "Accept": "application/vnd.docker.distribution.manifest.v2+json"
         }
         response = requests.head(self.registry + path, headers=headers, verify=self.requests_verify)
-        return response.headers.get("Docker-Content-Digest", False)
+        return response.headers["Docker-Content-Digest"]
 
     def delete_image(self, repo, digest):
         """Delete image by tag from registry"""
