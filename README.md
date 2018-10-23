@@ -22,6 +22,7 @@ optional arguments:
                         only consider tags containing the string or regex
   -m X, --minimum X     minimum allowed number of images in repository (overrides INI value)
   -d X, --days X        delete images older than this time (overrides INI value)
+  -P, --purge           delete images even if the initial image fails, useful for 0 size labels or duplicates
   --clean-all           delete all images in repository (DANGER!)
   --dry-run             not delete actually
   -v, --verbose         verbose mode
