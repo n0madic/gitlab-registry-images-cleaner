@@ -76,22 +76,31 @@ class GitlabRegistryClient(object):
         response = requests.head(self.registry + path, headers=headers, verify=self.requests_verify)
         return response.headers["Docker-Content-Digest"]
 
-    def delete_image(self, repo, tag):
+    def delete_image(self, repo, tag, purge):
         """Delete image by tag from registry"""
-        url = "/v2/{}/manifests/{}".format(repo, self.get_digest(repo, tag))
-        logging.debug("Delete URL: {}{}".format(self.registry, url))
-        if self.dry_run:
-            logging.warning("~ Dry Run!")
-        else:
-            headers = {
-                "Authorization": "Bearer " + self.get_bearer("repository:" + repo)
-            }
-            response = requests.delete(self.registry + url, headers=headers, verify=self.requests_verify)
-            if response.status_code == 202:
-                logging.info("+ OK")
-            else:
-                logging.error(response.text)
-
+        counter = 0
+        while counter < 2:
+            try:
+                url = "/v2/{}/manifests/{}".format(repo, self.get_digest(repo, tag))
+                logging.debug("Delete URL: {}{}".format(self.registry, url))
+                if self.dry_run:
+                    logging.warning("~ Dry Run!")
+                else:
+                    headers = {
+                        "Authorization": "Bearer " + self.get_bearer("repository:" + repo)
+                    }
+                    response = requests.delete(self.registry + url, headers=headers, verify=self.requests_verify)
+                    if response.status_code == 202:
+                        logging.info("+ OK")
+                    else:
+                        logging.error(response.text)
+                counter = 2
+            except:
+                if purge:
+                    url = self.registry.replace("https://", '') + "/" + repo + ":" + tag
+                    call(["docker", "tag", "busybox:latest", url])
+                    call(["doicker", "push", url])
+                    counter += 1
 
 if __name__ == "__main__":
     import argparse
@@ -100,6 +109,8 @@ if __name__ == "__main__":
     import dateutil.parser
     import os
     import sys
+    from subprocess import call
+
 
     config_name = os.path.basename(__file__).replace(".py", ".ini")
     parser = argparse.ArgumentParser(
@@ -150,6 +161,11 @@ if __name__ == "__main__":
         metavar="X",
         type=int)
     parser.add_argument(
+        "-P",
+        "--purge",
+        help="delete images even if they fail initial deletion, by pushing a tiny image over them and then deleting",
+        action="store_true")
+    parser.add_argument(
         "-d",
         "--days",
         help="delete images older than this time (overrides INI value)",
@@ -179,6 +195,9 @@ if __name__ == "__main__":
 
     if args.ini:
         config_name = args.ini
+
+    if args.purge:
+        call(["docker", "pull", "busybox:latest"])
 
     config = configparser.ConfigParser()
     if os.path.isfile(config_name):
@@ -247,7 +266,7 @@ if __name__ == "__main__":
             logging.warning("!!! CLEAN ALL IMAGES !!!")
             for tag in filtered_tags:
                 logging.warning("- DELETE: {}:{}".format(repository, tag))
-                GRICleaner.delete_image(repository, tag)
+                GRICleaner.delete_image(repository, tag, args.purge)
         elif len(filtered_tags) > minimum_images:
             latest = GRICleaner.get_image(repository, "latest")
             if "id" in latest:
@@ -268,5 +287,5 @@ if __name__ == "__main__":
                                                    tag,
                                                    created.replace(microsecond=0),
                                                    diff.days))
-                            GRICleaner.delete_image(repository, tag)
+                            GRICleaner.delete_image(repository, tag, args.purge)
                             filtered_tags.remove(tag)
