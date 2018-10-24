@@ -74,11 +74,19 @@ class GitlabRegistryClient(object):
             "Accept": "application/vnd.docker.distribution.manifest.v2+json"
         }
         response = requests.head(self.registry + path, headers=headers, verify=self.requests_verify)
+        if response.status_code == 404:
+            logging.info("- Not found")
+            return None
+
         return response.headers["Docker-Content-Digest"]
 
     def delete_image(self, repo, tag):
         """Delete image by tag from registry"""
-        url = "/v2/{}/manifests/{}".format(repo, self.get_digest(repo, tag))
+        digest = self.get_digest(repo, tag)
+        if digest == None:
+            return False
+
+        url = "/v2/{}/manifests/{}".format(repo, digest)
         logging.debug("Delete URL: {}{}".format(self.registry, url))
         if self.dry_run:
             logging.warning("~ Dry Run!")
@@ -92,6 +100,7 @@ class GitlabRegistryClient(object):
             else:
                 logging.error(response.text)
 
+        return True
 
 if __name__ == "__main__":
     import argparse
