@@ -4,6 +4,7 @@ import re
 import logging
 import json
 import requests
+import cachetools.func
 
 
 class GitlabRegistryClient(object):
@@ -16,17 +17,15 @@ class GitlabRegistryClient(object):
         self.registry = registry.rstrip('//')
         self.requests_verify = requests_verify
         self.dry_run = dry_run
-        self.tokens = dict()  # Cache for bearer tokens
 
+    @cachetools.func.ttl_cache(maxsize=100, ttl=10 * 60)
     def get_bearer(self, scope):
         """Return bearer token from Gitlab jwt"""
-        if scope not in self.tokens:
-            url = "{}/?service=container_registry&scope={}:*".format(self.jwt, scope)
-            response = requests.get(url, auth=self.auth, verify=self.requests_verify)
-            response.raise_for_status()
-            token = response.json()
-            self.tokens[scope] = token["token"]
-        return self.tokens[scope]
+        url = "{}/?service=container_registry&scope={}:*".format(self.jwt, scope)
+        response = requests.get(url, auth=self.auth, verify=self.requests_verify)
+        response.raise_for_status()
+        token = response.json()
+        return token["token"]
 
     def get_json(self, path, scope):
         """Return JSON from registry"""
