@@ -109,7 +109,7 @@ if __name__ == "__main__":
     import os
     import sys
 
-    config_name = os.path.basename(__file__).replace(".py", ".ini")
+    config_name = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'gricleaner.ini')
     parser = argparse.ArgumentParser(
         description="Utility to remove Docker images from the Gitlab registry",
         epilog="To work requires settings in the INI file or environment variables",
@@ -234,8 +234,8 @@ if __name__ == "__main__":
         registry=registry_url,
         requests_verify=not args.insecure,
         dry_run=args.dry_run)
-    minimum_images = args.minimum if args.minimum else int(config["Cleanup"]["Minimum Images"])
-    retention_days = args.days if args.days else int(config["Cleanup"]["Retention Days"])
+    minimum_images = int(config["Cleanup"]["Minimum Images"]) if args.minimum is None else args.minimum
+    retention_days = int(config["Cleanup"]["Retention Days"]) if args.days is None else args.days
 
     today = datetime.datetime.today()
 
