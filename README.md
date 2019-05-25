@@ -2,8 +2,8 @@
 
 ```
 usage: gricleaner.py [-h] [-i FILE] [-j URL] [-u NAME] [-p SECRET] [-g URL]
-                     [-r namespace/project] [-t SNAPSHOT] [-m X] [-d X]
-                     [--clean-all] [--dry-run] [-v] [-z] [--debug]
+                     [-r namespace/project] [-t SNAPSHOT] [-mr] [-mn] [-m X]
+                     [-d X] [--clean-all] [--dry-run] [-v] [-z] [--debug]
 
 Utility to remove Docker images from the Gitlab registry
 
@@ -19,7 +19,9 @@ optional arguments:
   -r namespace/project, --repository namespace/project
                         scan only these repositories (one or more)
   -t SNAPSHOT, --tag-match SNAPSHOT
-                        only consider tags containing the string or regex
+                        only consider tags containing the string or regex (with --match-regex flag)
+  -mr, --match-regex    Match tags by regex
+  -mn, --match-negate   Negate matched tags (tag should NOT match)
   -m X, --minimum X     minimum allowed number of images in repository (overrides INI value)
   -d X, --days X        delete images older than this time (overrides INI value)
   --clean-all           delete all images in repository (DANGER!)

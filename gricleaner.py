@@ -149,8 +149,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "-t",
         "--tag-match",
-        help="only consider tags containing the string",
+        help="only consider tags containing the string or regex (with --match-regex flag)",
         metavar="SNAPSHOT")
+    parser.add_argument(
+        "-mr",
+        "--match-regex",
+        help="Match tags by regex",
+        action='store_true')
+    parser.add_argument(
+        "-mn",
+        "--match-negate",
+        help="negate matched tags (tag should NOT match)",
+        action='store_true')
     parser.add_argument(
         "-m",
         "--minimum",
@@ -164,15 +174,19 @@ if __name__ == "__main__":
         metavar="X",
         type=int)
     parser.add_argument(
+        "--clean-latest",
+        help="also clean 'latest' tags (by default they're excluded from removal)",
+        action='store_true')
+    parser.add_argument(
         "--clean-all",
         action="store_true",
         help="delete all images in repository (DANGER!)")
     parser.add_argument(
         "--dry-run", action="store_true", help="not delete actually")
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="verbose mode")
-    parser.add_argument(
         "-z", "--insecure", action="store_true", help="disable SSL certificate verification")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="verbose mode")
     parser.add_argument("--debug", action="store_true", help="debug output")
     args = parser.parse_args()
 
@@ -246,7 +260,8 @@ if __name__ == "__main__":
         logging.debug("Tags ({}): {}".format(len(tags["tags"]), tags["tags"]))
 
         if args.tag_match:
-            filtered_tags = [i for i in tags["tags"] if args.tag_match in i or re.search(args.tag_match, i)]
+            filtered_tags = [i for i in tags["tags"] if (bool(re.match(args.tag_match, i)) if args.match_regex else args.tag_match in i) ^ args.match_negate]
+            logging.debug("Filtering by {} (regex: {}, negate: {})".format(args.tag_match, args.match_regex, args.match_negate))
             logging.debug("Filtered Tags ({}): {}".format(len(filtered_tags), filtered_tags))
         else:
             filtered_tags = tags["tags"]
