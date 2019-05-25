@@ -1,5 +1,12 @@
 # Gitlab registry images cleaner
 
+## Introduction
+*gitlab-registry-images-cleaner* is a tool for deleting Docker images in Gitlab Docker registry.
+Tested on Python 3 and Gitlab 11.10.
+
+## Usage
+
+### Command Line Interface
 ```
 usage: gricleaner.py [-h] [-i FILE] [-j URL] [-u NAME] [-p SECRET] [-g URL]
                      [-r namespace/project] [-t SNAPSHOT] [-mr] [-mn] [-m X]
@@ -31,4 +38,13 @@ optional arguments:
   --debug               debug output
 
 To work requires settings in the INI file or environment variables
+```
+
+### Final disk cleanup
+
+`gitlab-registry-images-cleaner` only "soft" deletes the images. Their data (image layers) are still stored.
+To delete those, you must run Docker registry GC. With GitLab omnibus package, it's possible with the following commands:
+
+```bash
+sudo gitlab-ctl registry-garbage-collect
 ```
