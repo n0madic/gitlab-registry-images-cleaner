@@ -10,7 +10,8 @@ Tested on Python 3 and Gitlab 11.10.
 ```
 usage: gricleaner.py [-h] [-i FILE] [-j URL] [-u NAME] [-p SECRET] [-g URL]
                      [-r namespace/project] [-t SNAPSHOT] [-mr] [-mn] [-m X]
-                     [-d X] [--clean-all] [--dry-run] [-v] [-z] [--debug]
+                     [-d X] [--clean-latest] [--clean-all] [--dry-run] [-z]
+                     [-v] [--debug]
 
 Utility to remove Docker images from the Gitlab registry
 
@@ -27,14 +28,15 @@ optional arguments:
                         scan only these repositories (one or more)
   -t SNAPSHOT, --tag-match SNAPSHOT
                         only consider tags containing the string or regex (with --match-regex flag)
-  -mr, --match-regex    Match tags by regex
-  -mn, --match-negate   Negate matched tags (tag should NOT match)
+  -mr, --match-regex    match tags by regex
+  -mn, --match-negate   negate matched tags (tag should NOT match)
   -m X, --minimum X     minimum allowed number of images in repository (overrides INI value)
   -d X, --days X        delete images older than this time (overrides INI value)
+  --clean-latest        also clean 'latest' tags (by default they're excluded from removal)
   --clean-all           delete all images in repository (DANGER!)
   --dry-run             not delete actually
-  -v, --verbose         verbose mode
   -z, --insecure        disable SSL certificate verification
+  -v, --verbose         verbose mode
   --debug               debug output
 
 To work requires settings in the INI file or environment variables

@@ -154,7 +154,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-mr",
         "--match-regex",
-        help="Match tags by regex",
+        help="match tags by regex",
         action='store_true')
     parser.add_argument(
         "-mn",
