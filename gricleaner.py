@@ -109,7 +109,7 @@ if __name__ == "__main__":
     import os
     import sys
 
-    config_name = os.path.basename(__file__).replace(".py", ".ini")
+    config_name = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'gricleaner.ini')
     parser = argparse.ArgumentParser(
         description="Utility to remove Docker images from the Gitlab registry",
         epilog="To work requires settings in the INI file or environment variables",
@@ -149,8 +149,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "-t",
         "--tag-match",
-        help="only consider tags containing the string",
+        help="only consider tags containing the string or regex (with --match-regex flag)",
         metavar="SNAPSHOT")
+    parser.add_argument(
+        "-mr",
+        "--match-regex",
+        help="match tags by regex",
+        action='store_true')
+    parser.add_argument(
+        "-mn",
+        "--match-negate",
+        help="negate matched tags (tag should NOT match)",
+        action='store_true')
     parser.add_argument(
         "-m",
         "--minimum",
@@ -164,15 +174,19 @@ if __name__ == "__main__":
         metavar="X",
         type=int)
     parser.add_argument(
+        "--clean-latest",
+        help="also clean 'latest' tags (by default they're excluded from removal)",
+        action='store_true')
+    parser.add_argument(
         "--clean-all",
         action="store_true",
         help="delete all images in repository (DANGER!)")
     parser.add_argument(
         "--dry-run", action="store_true", help="not delete actually")
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="verbose mode")
-    parser.add_argument(
         "-z", "--insecure", action="store_true", help="disable SSL certificate verification")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="verbose mode")
     parser.add_argument("--debug", action="store_true", help="debug output")
     args = parser.parse_args()
 
@@ -220,8 +234,8 @@ if __name__ == "__main__":
         registry=registry_url,
         requests_verify=not args.insecure,
         dry_run=args.dry_run)
-    minimum_images = args.minimum if args.minimum else int(config["Cleanup"]["Minimum Images"])
-    retention_days = args.days if args.days else int(config["Cleanup"]["Retention Days"])
+    minimum_images = int(config["Cleanup"]["Minimum Images"]) if args.minimum is None else args.minimum
+    retention_days = int(config["Cleanup"]["Retention Days"]) if args.days is None else args.days
 
     today = datetime.datetime.today()
 
@@ -231,6 +245,8 @@ if __name__ == "__main__":
         catalog = GRICleaner.get_catalog()
         logging.debug('Fetched catalog: {}'.format(catalog))
     logging.info("Found {} repositories".format(len(catalog)))
+
+    total_images_deleted = 0
     for repository in catalog:
         logging.info("SCAN repository: {}".format(repository))
         try:
@@ -246,35 +262,44 @@ if __name__ == "__main__":
         logging.debug("Tags ({}): {}".format(len(tags["tags"]), tags["tags"]))
 
         if args.tag_match:
-            filtered_tags = [i for i in tags["tags"] if args.tag_match in i or re.search(args.tag_match, i)]
+            filtered_tags = [i for i in tags["tags"] if (bool(re.match(args.tag_match, i)) if args.match_regex else args.tag_match in i) ^ args.match_negate]
+            logging.debug("Filtering by {} (regex: {}, negate: {})".format(args.tag_match, args.match_regex, args.match_negate))
             logging.debug("Filtered Tags ({}): {}".format(len(filtered_tags), filtered_tags))
         else:
             filtered_tags = tags["tags"]
 
+
+        if not args.clean_latest:
+            # filter our "latest" tag
+            filtered_tags = [x for x in filtered_tags if x != 'latest']
+
+        images_deleted = 0
         if args.clean_all:
             logging.warning("!!! CLEAN ALL IMAGES !!!")
             for tag in filtered_tags:
                 logging.warning("- DELETE: {}:{}".format(repository, tag))
                 GRICleaner.delete_image(repository, tag)
-        elif len(filtered_tags) > minimum_images:
-            latest = GRICleaner.get_image(repository, "latest")
-            if "id" in latest:
-                latest_id = latest["id"]
-                logging.debug("Latest ID: {}".format(latest_id))
-            else:
-                latest_id = ""
+                images_deleted += 1
+        else:
             for tag in list(filtered_tags):
-                if len(filtered_tags) > minimum_images:
-                    image = GRICleaner.get_image(repository, tag)
-                    if image and image["id"] != latest_id:
-                        created = dateutil.parser.parse(image["created"]).replace(tzinfo=None)
-                        diff = today - created
-                        logging.debug("Tag {} with image id {} days diff: {}".format(tag, image["id"], diff.days))
-                        if diff.days > retention_days:
-                            logging.warning("- DELETE: {}:{}, Created at {} ({} days ago)".
-                                            format(repository,
-                                                   tag,
-                                                   created.replace(microsecond=0),
-                                                   diff.days))
-                            GRICleaner.delete_image(repository, tag)
-                            filtered_tags.remove(tag)
+                if len(filtered_tags) <= minimum_images:
+                    break
+
+                image = GRICleaner.get_image(repository, tag)
+                created = dateutil.parser.parse(image["created"]).replace(tzinfo=None)
+                diff = today - created
+                logging.debug("Tag {} with image id {} days diff: {}".format(tag, image["id"], diff.days))
+                if diff.days > retention_days:
+                    logging.warning("- DELETE: {}:{}, Created at {} ({} days ago)".
+                                    format(repository,
+                                            tag,
+                                            created.replace(microsecond=0),
+                                            diff.days))
+                    GRICleaner.delete_image(repository, tag)
+                    filtered_tags.remove(tag)
+                    images_deleted += 1
+        
+        logging.warning("{} images were deleted from repo {}.".format(images_deleted, repository))
+        total_images_deleted += images_deleted
+
+    logging.warning("Done. {} images were deleted in total.".format(total_images_deleted))
