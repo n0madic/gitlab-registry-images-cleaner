@@ -281,11 +281,19 @@ if __name__ == "__main__":
                 GRICleaner.delete_image(repository, tag)
                 images_deleted += 1
         else:
+            latest = GRICleaner.get_image(repository, "latest")
+            latest_id = latest.get('id', None)
+            if latest_id:
+                logging.debug("Latest ID: {}".format(latest_id))
+            
             for tag in list(filtered_tags):
                 if len(filtered_tags) <= minimum_images:
                     break
 
                 image = GRICleaner.get_image(repository, tag)
+                if not args.clean_latest and image["id"] == latest_id:
+                    continue
+                
                 created = dateutil.parser.parse(image["created"]).replace(tzinfo=None)
                 diff = today - created
                 logging.debug("Tag {} with image id {} days diff: {}".format(tag, image["id"], diff.days))
