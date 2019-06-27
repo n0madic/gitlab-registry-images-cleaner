@@ -285,28 +285,29 @@ if __name__ == "__main__":
             latest_id = latest.get('id', None)
             if latest_id:
                 logging.debug("Latest ID: {}".format(latest_id))
-            
+
             for tag in list(filtered_tags):
                 if len(filtered_tags) <= minimum_images:
                     break
 
                 image = GRICleaner.get_image(repository, tag)
-                if not args.clean_latest and image["id"] == latest_id:
-                    continue
-                
-                created = dateutil.parser.parse(image["created"]).replace(tzinfo=None)
-                diff = today - created
-                logging.debug("Tag {} with image id {} days diff: {}".format(tag, image["id"], diff.days))
-                if diff.days > retention_days:
-                    logging.warning("- DELETE: {}:{}, Created at {} ({} days ago)".
-                                    format(repository,
-                                            tag,
-                                            created.replace(microsecond=0),
-                                            diff.days))
-                    GRICleaner.delete_image(repository, tag)
-                    filtered_tags.remove(tag)
-                    images_deleted += 1
-        
+                if image:
+                    if not args.clean_latest and image.get('id', None) == latest_id:
+                        continue
+
+                    created = dateutil.parser.parse(image["created"]).replace(tzinfo=None)
+                    diff = today - created
+                    logging.debug("Tag {} with image id {} days diff: {}".format(tag, image["id"], diff.days))
+                    if diff.days > retention_days:
+                        logging.warning("- DELETE: {}:{}, Created at {} ({} days ago)".
+                                        format(repository,
+                                                tag,
+                                                created.replace(microsecond=0),
+                                                diff.days))
+                        GRICleaner.delete_image(repository, tag)
+                        filtered_tags.remove(tag)
+                        images_deleted += 1
+
         logging.warning("{} images were deleted from repo {}.".format(images_deleted, repository))
         total_images_deleted += images_deleted
 
