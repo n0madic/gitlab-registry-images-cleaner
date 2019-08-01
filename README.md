@@ -50,3 +50,24 @@ To delete those, you must run Docker registry GC. With GitLab omnibus package, i
 ```bash
 sudo gitlab-ctl registry-garbage-collect
 ```
+
+## Docker image
+
+### Build the docker image
+
+```bash
+docker build -t [youruser]/gricleaner:latest .
+```
+
+### Push the image
+
+```bash
+docker login
+docker push [youruser]/gricleaner:latest
+```
+
+Now you can pull it and use it in your Gitlab CI
+
+```
+docker run --rm -t [youruser]/gricleaner:latest -u $USER -p $TOKEN -g $CI_REGISTRY -j https://[gitlab_host]/jwt/auth -r group/project ...
+```
