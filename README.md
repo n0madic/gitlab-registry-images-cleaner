@@ -69,5 +69,5 @@ docker push [youruser]/gricleaner:latest
 Now you can pull it and use it in your Gitlab CI
 
 ```
-docker run --rm [youruser]/gricleaner:latest ...
+docker run --rm -t [youruser]/gricleaner:latest -u $USER -p $TOKEN -g $CI_REGISTRY -j https://[gitlab_host]/jwt/auth -r group/project ...
 ```
