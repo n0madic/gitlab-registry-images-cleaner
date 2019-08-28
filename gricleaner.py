@@ -91,7 +91,7 @@ class GitlabRegistryClient(object):
         return response.headers["Docker-Content-Digest"]
 
     def delete_image(self, repo, tag, image_id=False):
-        """Delete image by tag from registry"""
+        """Delete image by tag from registry. returns False if deletion is skipped"""
         if args.single_tag and image_id:
             image_tags = image_tags_by_id.get(image_id, []).copy()
             if image_tags:
@@ -99,14 +99,14 @@ class GitlabRegistryClient(object):
                 if image_tags:  # other co-tags
                     logging.warning(
                         "Delete cancelled !"
-                        " Image {repo}:{tag} is not candidate for deletion, "
-                        " --single-tag and image used by other tags {tags}".format(
+                        " Image {repo}:{tag} is not candidate for deletion\n"
+                        " --single-tag and image used by other tags: {tags}".format(
                             repo=repo,
                             tag=tag,
                             tags=",".join(image_tags)
                         )
                     )
-                    return
+                    return False
 
         digest = self.get_digest(repo, tag)
         if digest == None:
@@ -344,9 +344,9 @@ if __name__ == "__main__":
                                                 tag,
                                                 created.replace(microsecond=0),
                                                 diff.days))
-                        GRICleaner.delete_image(repository, tag, image_id=image.get('id', False))
+                        if GRICleaner.delete_image(repository, tag, image_id=image.get('id', False)):
+                            images_deleted += 1
                         filtered_tags.remove(tag)
-                        images_deleted += 1
 
         logging.warning("{} images were deleted from repo {}.".format(images_deleted, repository))
         total_images_deleted += images_deleted
