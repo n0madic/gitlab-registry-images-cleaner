@@ -337,14 +337,14 @@ if __name__ == "__main__":
 
                     created = dateutil.parser.parse(image["created"]).replace(tzinfo=None)
                     diff = today - created
-                    logging.debug("Tag {} with image id {} days diff: {}".format(tag, image["id"], diff.days))
+                    logging.debug("Tag {} with image id {} days diff: {}".format(tag, image.get('id', False), diff.days))
                     if diff.days > retention_days:
                         logging.warning("- DELETE: {}:{}, Created at {} ({} days ago)".
                                         format(repository,
                                                 tag,
                                                 created.replace(microsecond=0),
                                                 diff.days))
-                        GRICleaner.delete_image(repository, tag, image_id=image[id])
+                        GRICleaner.delete_image(repository, tag, image_id=image.get('id', False))
                         filtered_tags.remove(tag)
                         images_deleted += 1
 
