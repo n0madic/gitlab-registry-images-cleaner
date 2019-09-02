@@ -49,7 +49,7 @@ To work requires settings in the INI file or environment variables
 To delete those, you must run Docker registry GC. With GitLab omnibus package, it's possible with the following commands:
 
 ```bash
-sudo gitlab-ctl registry-garbage-collect
+sudo gitlab-ctl registry-garbage-collect -m
 ```
 
 ## Docker image
@@ -70,5 +70,5 @@ docker push [youruser]/gricleaner:latest
 Now you can pull it and use it in your Gitlab CI
 
 ```
-docker run --rm -t [youruser]/gricleaner:latest -u $USER -p $TOKEN -g $CI_REGISTRY -j https://[gitlab_host]/jwt/auth -r group/project ...
+docker run --rm -e GITLAB_REGISTRY -e GITLAB_JWT_URL -e GITLAB_USER -e GITLAB_PASSWORD -t [youruser]/gricleaner:latest -r group/project ...
 ```
