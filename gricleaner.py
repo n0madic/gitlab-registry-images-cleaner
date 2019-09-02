@@ -56,6 +56,11 @@ class GitlabRegistryClient(object):
 
     def get_image(self, repo, tag):
         """Return image by manifest from registry"""
+        # cache behaviour only with --single-tag
+        image = args.single_tag and image_cache_by_tag.get(tag) or None
+        if image:
+            return image
+
         manifest = self.get_manifest(repo, tag)
         if "errors" in manifest:
             if tag != 'latest':
@@ -63,7 +68,13 @@ class GitlabRegistryClient(object):
                     repo, tag, manifest["errors"][0]["message"]))
             return {}
         else:
-            return json.loads(manifest["history"][0]["v1Compatibility"])
+            image = json.loads(manifest["history"][0]["v1Compatibility"])
+            if args.single_tag:  # cache behaviour only with --single-tag
+                image_cache_by_tag[tag] = image
+                # get id using backward v1Compatibility (no manifest.v2+json accep header)
+                # (versus getting config.digest)
+                image_tags_by_id.setdefault(image['id'], []).append(tag)
+            return image
 
     def get_digest(self, repo, tag):
         """Return digest for manifest from registry"""
@@ -79,8 +90,24 @@ class GitlabRegistryClient(object):
 
         return response.headers["Docker-Content-Digest"]
 
-    def delete_image(self, repo, tag):
-        """Delete image by tag from registry"""
+    def delete_image(self, repo, tag, image_id=False):
+        """Delete image by tag from registry. returns False if deletion is skipped"""
+        if args.single_tag and image_id:
+            image_tags = image_tags_by_id.get(image_id, []).copy()
+            if image_tags:
+                image_tags.remove(tag)  # deduce tag itself
+                if image_tags:  # other co-tags
+                    logging.warning(
+                        "Delete cancelled !"
+                        " Image {repo}:{tag} is not candidate for deletion\n"
+                        " --single-tag and image used by other tags: {tags}".format(
+                            repo=repo,
+                            tag=tag,
+                            tags=",".join(image_tags)
+                        )
+                    )
+                    return False
+
         digest = self.get_digest(repo, tag)
         if digest == None:
             return False
@@ -182,6 +209,11 @@ if __name__ == "__main__":
         action="store_true",
         help="delete all images in repository (DANGER!)")
     parser.add_argument(
+        "--single-tag",
+        action="store_true",
+        help="only delete images with one tag (no 'co-tag' delete)"
+    )
+    parser.add_argument(
         "--dry-run", action="store_true", help="not delete actually")
     parser.add_argument(
         "-z", "--insecure", action="store_true", help="disable SSL certificate verification")
@@ -248,6 +280,9 @@ if __name__ == "__main__":
 
     total_images_deleted = 0
     for repository in catalog:
+        image_cache_by_tag = {}
+        image_tags_by_id = {}
+
         logging.info("SCAN repository: {}".format(repository))
         try:
             tags = GRICleaner.get_tags(repository)
@@ -268,7 +303,6 @@ if __name__ == "__main__":
         else:
             filtered_tags = tags["tags"]
 
-
         if not args.clean_latest:
             # filter our "latest" tag
             filtered_tags = [x for x in filtered_tags if x != 'latest']
@@ -286,6 +320,12 @@ if __name__ == "__main__":
             if latest_id:
                 logging.debug("Latest ID: {}".format(latest_id))
 
+            if args.single_tag:
+                # load all tags images in cache
+                # to identify later if each used by severals tags
+                for tag in tags["tags"]:
+                    GRICleaner.get_image(repository, tag)
+
             for tag in list(filtered_tags):
                 if len(filtered_tags) <= minimum_images:
                     break
@@ -297,16 +337,16 @@ if __name__ == "__main__":
 
                     created = dateutil.parser.parse(image["created"]).replace(tzinfo=None)
                     diff = today - created
-                    logging.debug("Tag {} with image id {} days diff: {}".format(tag, image["id"], diff.days))
+                    logging.debug("Tag {} with image id {} days diff: {}".format(tag, image.get('id', False), diff.days))
                     if diff.days > retention_days:
                         logging.warning("- DELETE: {}:{}, Created at {} ({} days ago)".
                                         format(repository,
                                                 tag,
                                                 created.replace(microsecond=0),
                                                 diff.days))
-                        GRICleaner.delete_image(repository, tag)
+                        if GRICleaner.delete_image(repository, tag, image_id=image.get('id', False)):
+                            images_deleted += 1
                         filtered_tags.remove(tag)
-                        images_deleted += 1
 
         logging.warning("{} images were deleted from repo {}.".format(images_deleted, repository))
         total_images_deleted += images_deleted
