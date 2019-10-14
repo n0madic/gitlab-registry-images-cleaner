@@ -56,8 +56,7 @@ class GitlabRegistryClient(object):
 
     def get_image(self, repo, tag):
         """Return image by manifest from registry"""
-        # cache behaviour only with --single-tag
-        image = args.single_tag and image_cache_by_tag.get(tag) or None
+        image = use_image_cache and image_cache_by_tag.get(tag) or None
         if image:
             return image
 
@@ -69,7 +68,7 @@ class GitlabRegistryClient(object):
             return {}
         else:
             image = json.loads(manifest["history"][0]["v1Compatibility"])
-            if args.single_tag:  # cache behaviour only with --single-tag
+            if use_image_cache:  # cache behaviour 
                 image_cache_by_tag[tag] = image
                 # get id using backward v1Compatibility (no manifest.v2+json accep header)
                 # (versus getting config.digest)
@@ -248,6 +247,7 @@ if __name__ == "__main__":
     if args.single_tag and args.preserve_tags:
         logging.error("--single-tag and --preserve-tags can not be used together")
     preserve_tags = args.preserve_tags and list(map(lambda x: x.strip(), args.preserve_tags.split(','))) or []
+    use_image_cache = args.single_tag or bool(preserve_tags)
 
     if args.insecure:
         requests.packages.urllib3.disable_warnings()
@@ -328,9 +328,10 @@ if __name__ == "__main__":
             if latest_id:
                 logging.debug("Latest ID: {}".format(latest_id))
 
-            if args.single_tag:
+            if use_image_cache:
                 # load all tags images in cache
                 # to identify later if each used by severals tags
+                logging.info("loading all images tags in cache...")
                 for tag in tags["tags"]:
                     GRICleaner.get_image(repository, tag)
 
