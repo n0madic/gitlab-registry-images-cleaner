@@ -91,18 +91,19 @@ class GitlabRegistryClient(object):
 
     def delete_image(self, repo, tag, image_id=False):
         """Delete image by tag from registry. returns False if deletion is skipped"""
-        if args.single_tag and image_id:
-            image_tags = image_tags_by_id.get(image_id, []).copy()
-            if image_tags:
-                image_tags.remove(tag)  # deduce tag itself
-                if image_tags:  # other co-tags
+        if use_image_cache and image_id:
+            cotags = image_tags_by_id.get(image_id, []).copy()
+            if cotags:
+                cotags.remove(tag)  # deduce tag itself
+                if args.single_tag and cotags:
+                    # single-tag flag and other co-tags: cancel delete
                     logging.warning(
                         "Delete cancelled !"
                         " Image {repo}:{tag} is not candidate for deletion\n"
                         " --single-tag and image used by other tags: {tags}".format(
                             repo=repo,
                             tag=tag,
-                            tags=",".join(image_tags)
+                            tags=",".join(cotags)
                         )
                     )
                     return False
