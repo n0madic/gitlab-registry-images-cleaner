@@ -214,6 +214,10 @@ if __name__ == "__main__":
         help="only delete images with one tag (no 'co-tag' delete)"
     )
     parser.add_argument(
+        "--preserve-tags",
+        help="preserve images used by given tags (example --preserve-tags=master,prod,staging,latest)"
+    )
+    parser.add_argument(
         "--dry-run", action="store_true", help="not delete actually")
     parser.add_argument(
         "-z", "--insecure", action="store_true", help="disable SSL certificate verification")
@@ -240,6 +244,10 @@ if __name__ == "__main__":
     elif args.ini:
         logging.critical("Config {} not found!".format(args.ini))
         sys.exit(1)
+
+    if args.single_tag and args.preserve_tags:
+        logging.error("--single-tag and --preserve-tags can not be used together")
+    preserve_tags = args.preserve_tags and list(map(lambda x: x.strip(), args.preserve_tags.split(','))) or []
 
     if args.insecure:
         requests.packages.urllib3.disable_warnings()
