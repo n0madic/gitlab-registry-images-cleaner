@@ -332,7 +332,7 @@ if __name__ == "__main__":
             if use_image_cache:
                 # load all tags images in cache
                 # to identify later if each used by severals tags
-                logging.info("loading all images tags in cache...")
+                logging.warning("loading all images tags in cache...")
                 for tag in tags["tags"]:
                     GRICleaner.get_image(repository, tag)
 
