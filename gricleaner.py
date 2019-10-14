@@ -91,22 +91,48 @@ class GitlabRegistryClient(object):
 
     def delete_image(self, repo, tag, image_id=False):
         """Delete image by tag from registry. returns False if deletion is skipped"""
+        if preserve_tags and tag in preserve_tags:
+            logging.warning(
+                "Delete cancelled !"
+                " Image {repo}:{tag} is not candidate for deletion\n"
+                " image is listed in --preserve_tags {preserve_tags}".format(
+                    repo=repo,
+                    tag=tag,
+                    preserve_tags=",".join(preserve_tags)
+                )
+            )
+            return False
+
         if use_image_cache and image_id:
             cotags = image_tags_by_id.get(image_id, []).copy()
             if cotags:
                 cotags.remove(tag)  # deduce tag itself
-                if args.single_tag and cotags:
-                    # single-tag flag and other co-tags: cancel delete
-                    logging.warning(
-                        "Delete cancelled !"
-                        " Image {repo}:{tag} is not candidate for deletion\n"
-                        " --single-tag and image used by other tags: {tags}".format(
-                            repo=repo,
-                            tag=tag,
-                            tags=",".join(cotags)
+                if cotags:
+                    if preserve_tags:
+                        if any([bool(ct in preserve_tags) for ct in cotags]):
+                            logging.warning(
+                                "Delete cancelled !"
+                                " Image {repo}:{tag} is not candidate for deletion\n"
+                                " image has co-tag(s) {tags} that are listed in --preserve_tags {preserve_tags}".format(
+                                    repo=repo,
+                                    tag=tag,
+                                    tags=",".join(cotags),
+                                    preserve_tags=",".join(preserve_tags)
+                                )
+                            )
+                            return False
+                    elif args.single_tag:
+                        # single-tag flag and other co-tags: cancel delete
+                        logging.warning(
+                            "Delete cancelled !"
+                            " Image {repo}:{tag} is not candidate for deletion\n"
+                            " --single-tag and image used by other tags: {tags}".format(
+                                repo=repo,
+                                tag=tag,
+                                tags=",".join(cotags)
+                            )
                         )
-                    )
-                    return False
+                        return False
 
         digest = self.get_digest(repo, tag)
         if digest == None:
