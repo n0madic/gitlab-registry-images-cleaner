@@ -273,6 +273,7 @@ if __name__ == "__main__":
 
     if args.single_tag and args.preserve_tags:
         logging.error("--single-tag and --preserve-tags can not be used together")
+        exit(-1)
     preserve_tags = args.preserve_tags and list(map(lambda x: x.strip(), args.preserve_tags.split(','))) or []
     use_image_cache = args.single_tag or bool(preserve_tags)
 
@@ -301,8 +302,12 @@ if __name__ == "__main__":
         registry=registry_url,
         requests_verify=not args.insecure,
         dry_run=args.dry_run)
-    minimum_images = int(config["Cleanup"]["Minimum Images"]) if args.minimum is None else args.minimum
-    retention_days = int(config["Cleanup"]["Retention Days"]) if args.days is None else args.days
+    minimum_images = int(config.get("Cleanup", {}).get("Minimum Images", 0)) if args.minimum is None else args.minimum
+    retention_days = int(config.get("Cleanup", {}).get("Retention Days", 0)) if args.days is None else args.days
+    if not use_image_cache and (minimum_images == 0 or retention_days == 0):
+        # except with --single-tag and --preserve-tags, -d and -m are both required
+        logging.error("Minimum Images -m and Retention Days -d are required (so far --single-tag or --preserve-tags is not activated)")
+        exit(-1)
 
     today = datetime.datetime.today()
 
@@ -363,7 +368,7 @@ if __name__ == "__main__":
                     GRICleaner.get_image(repository, tag)
 
             for tag in list(filtered_tags):
-                if len(filtered_tags) <= minimum_images:
+                if minimum_images > 0 and len(filtered_tags) <= minimum_images:
                     break
 
                 image = GRICleaner.get_image(repository, tag)
@@ -374,7 +379,7 @@ if __name__ == "__main__":
                     created = dateutil.parser.parse(image["created"]).replace(tzinfo=None)
                     diff = today - created
                     logging.debug("Tag {} with image id {} days diff: {}".format(tag, image.get('id', False), diff.days))
-                    if diff.days > retention_days:
+                    if retention_days == 0 or (diff.days > retention_days):
                         logging.warning("- DELETE: {}:{}, Created at {} ({} days ago)".
                                         format(repository,
                                                 tag,
