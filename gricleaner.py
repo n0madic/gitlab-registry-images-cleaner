@@ -264,9 +264,11 @@ if __name__ == "__main__":
     if args.ini:
         config_name = args.ini
 
+    has_config = False
     config = configparser.ConfigParser()
     if os.path.isfile(config_name):
         config.read(config_name)
+        has_config = True
     elif args.ini:
         logging.critical("Config {} not found!".format(args.ini))
         sys.exit(1)
@@ -301,13 +303,17 @@ if __name__ == "__main__":
         jwt=jwt_url,
         registry=registry_url,
         requests_verify=not args.insecure,
-        dry_run=args.dry_run)
-    minimum_images = int(config.get("Cleanup", {}).get("Minimum Images", 0)) if args.minimum is None else args.minimum
-    retention_days = int(config.get("Cleanup", {}).get("Retention Days", 0)) if args.days is None else args.days
-    if not use_image_cache and (minimum_images == 0 or retention_days == 0):
-        # except with --single-tag and --preserve-tags, -d and -m are both required
-        logging.error("Minimum Images -m and Retention Days -d are required (so far --single-tag or --preserve-tags is not activated)")
-        exit(-1)
+        dry_run=args.dry_run
+    )
+
+    if use_image_cache and not has_config:
+        # except with --single-tag and --preserve-tags...
+        minimum_images = args.minimum or 0
+        retention_days = args.days or 0
+    else:
+        # ...  -d and -m are each required
+        minimum_images = int(config["Cleanup"]["Minimum Images"]) if args.minimum is None else args.minimum
+        retention_days = int(config["Cleanup"]["Retention Days"]) if args.days is None else args.days
 
     today = datetime.datetime.today()
 
