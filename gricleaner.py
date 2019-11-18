@@ -83,7 +83,7 @@ class GitlabRegistryClient(object):
             "Accept": "application/vnd.docker.distribution.manifest.v2+json"
         }
         response = requests.head(self.registry + path, headers=headers, verify=self.requests_verify)
-        if response.status_code == 404:
+        if response.status_code == 404 or not response.headers["Docker-Content-Digest"]:
             logging.info("- Not found")
             return None
 
