@@ -84,7 +84,7 @@ class GitlabRegistryClient(object):
         }
         response = requests.head(self.registry + path, headers=headers, verify=self.requests_verify)
         if response.status_code == 404 or "Docker-Content-Digest" not in response.headers:
-            logging.info("- Not found")
+            logging.warning("Digest not found ! {} {}".format(response.status_code, json.dumps(response.headers)))
             return None
 
         return response.headers["Docker-Content-Digest"]
