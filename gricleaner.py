@@ -18,7 +18,7 @@ class GitlabRegistryClient(object):
         self.requests_verify = requests_verify
         self.dry_run = dry_run
 
-    @cachetools.func.ttl_cache(maxsize=100, ttl=10 * 60)
+    @cachetools.func.ttl_cache(maxsize=100, ttl=59) # gitlab jwt token expires each 60s: ttl 59
     def get_bearer(self, scope):
         """Return bearer token from Gitlab jwt"""
         url = "{}/?service=container_registry&scope={}:*".format(self.jwt, scope)
