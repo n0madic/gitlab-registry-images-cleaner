@@ -35,6 +35,7 @@ optional arguments:
   --clean-latest        also clean 'latest' tags (by default they're excluded from removal)
   --clean-all           delete all images in repository (DANGER!)
   --single-tag          only delete images with one tag (no 'co-tag' delete)
+  --preserve-tags       preserve images used by given tags (example --preserve-tags=master,prod,staging,latest)
   --dry-run             not delete actually
   -z, --insecure        disable SSL certificate verification
   -v, --verbose         verbose mode
