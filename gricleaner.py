@@ -18,7 +18,7 @@ class GitlabRegistryClient(object):
         self.requests_verify = requests_verify
         self.dry_run = dry_run
 
-    @cachetools.func.ttl_cache(maxsize=100, ttl=10 * 60)
+    @cachetools.func.ttl_cache(maxsize=100, ttl=59)  # gitlab jwt token expires each 60s: ttl 59
     def get_bearer(self, scope):
         """Return bearer token from Gitlab jwt"""
         url = "{}/?service=container_registry&scope={}:*".format(self.jwt, scope)
@@ -56,8 +56,7 @@ class GitlabRegistryClient(object):
 
     def get_image(self, repo, tag):
         """Return image by manifest from registry"""
-        # cache behaviour only with --single-tag
-        image = args.single_tag and image_cache_by_tag.get(tag) or None
+        image = use_image_cache and image_cache_by_tag.get(tag) or None
         if image:
             return image
 
@@ -69,7 +68,7 @@ class GitlabRegistryClient(object):
             return {}
         else:
             image = json.loads(manifest["history"][0]["v1Compatibility"])
-            if args.single_tag:  # cache behaviour only with --single-tag
+            if use_image_cache:  # cache behaviour 
                 image_cache_by_tag[tag] = image
                 # get id using backward v1Compatibility (no manifest.v2+json accep header)
                 # (versus getting config.digest)
@@ -84,29 +83,56 @@ class GitlabRegistryClient(object):
             "Accept": "application/vnd.docker.distribution.manifest.v2+json"
         }
         response = requests.head(self.registry + path, headers=headers, verify=self.requests_verify)
-        if response.status_code == 404:
-            logging.info("- Not found")
+        if response.status_code == 404 or response.status_code == 401 or "Docker-Content-Digest" not in response.headers:
+            logging.warning("Digest not found ! {} {}".format(response.status_code, str(response.headers)))
             return None
 
         return response.headers["Docker-Content-Digest"]
 
     def delete_image(self, repo, tag, image_id=False):
         """Delete image by tag from registry. returns False if deletion is skipped"""
-        if args.single_tag and image_id:
-            image_tags = image_tags_by_id.get(image_id, []).copy()
-            if image_tags:
-                image_tags.remove(tag)  # deduce tag itself
-                if image_tags:  # other co-tags
-                    logging.warning(
-                        "Delete cancelled !"
-                        " Image {repo}:{tag} is not candidate for deletion\n"
-                        " --single-tag and image used by other tags: {tags}".format(
-                            repo=repo,
-                            tag=tag,
-                            tags=",".join(image_tags)
+        if preserve_tags and tag in preserve_tags:
+            logging.warning(
+                "Delete cancelled !"
+                " Image {repo}:{tag} is not candidate for deletion\n"
+                " image is listed in --preserve_tags {preserve_tags}".format(
+                    repo=repo,
+                    tag=tag,
+                    preserve_tags=",".join(preserve_tags)
+                )
+            )
+            return False
+
+        if use_image_cache and image_id:
+            cotags = image_tags_by_id.get(image_id, []).copy()
+            if cotags:
+                cotags.remove(tag)  # deduce tag itself
+                if cotags:
+                    if preserve_tags:
+                        if any([bool(ct in preserve_tags) for ct in cotags]):
+                            logging.warning(
+                                "Delete cancelled !"
+                                " Image {repo}:{tag} is not candidate for deletion\n"
+                                " image has co-tag(s) {tags} that are listed in --preserve_tags {preserve_tags}".format(
+                                    repo=repo,
+                                    tag=tag,
+                                    tags=",".join(cotags),
+                                    preserve_tags=",".join(preserve_tags)
+                                )
+                            )
+                            return False
+                    elif args.single_tag:
+                        # single-tag flag and other co-tags: cancel delete
+                        logging.warning(
+                            "Delete cancelled !"
+                            " Image {repo}:{tag} is not candidate for deletion\n"
+                            " --single-tag and image used by other tags: {tags}".format(
+                                repo=repo,
+                                tag=tag,
+                                tags=",".join(cotags)
+                            )
                         )
-                    )
-                    return False
+                        return False
 
         digest = self.get_digest(repo, tag)
         if digest == None:
@@ -214,6 +240,10 @@ if __name__ == "__main__":
         help="only delete images with one tag (no 'co-tag' delete)"
     )
     parser.add_argument(
+        "--preserve-tags",
+        help="preserve images used by given tags (example --preserve-tags=master,prod,staging,latest)"
+    )
+    parser.add_argument(
         "--dry-run", action="store_true", help="not delete actually")
     parser.add_argument(
         "-z", "--insecure", action="store_true", help="disable SSL certificate verification")
@@ -234,12 +264,20 @@ if __name__ == "__main__":
     if args.ini:
         config_name = args.ini
 
+    has_config = False
     config = configparser.ConfigParser()
     if os.path.isfile(config_name):
         config.read(config_name)
+        has_config = True
     elif args.ini:
         logging.critical("Config {} not found!".format(args.ini))
         sys.exit(1)
+
+    if args.single_tag and args.preserve_tags:
+        logging.error("--single-tag and --preserve-tags can not be used together")
+        exit(-1)
+    preserve_tags = args.preserve_tags and list(map(lambda x: x.strip(), args.preserve_tags.split(','))) or []
+    use_image_cache = args.single_tag or bool(preserve_tags)
 
     if args.insecure:
         requests.packages.urllib3.disable_warnings()
@@ -265,9 +303,17 @@ if __name__ == "__main__":
         jwt=jwt_url,
         registry=registry_url,
         requests_verify=not args.insecure,
-        dry_run=args.dry_run)
-    minimum_images = int(config["Cleanup"]["Minimum Images"]) if args.minimum is None else args.minimum
-    retention_days = int(config["Cleanup"]["Retention Days"]) if args.days is None else args.days
+        dry_run=args.dry_run
+    )
+
+    if use_image_cache and not has_config:
+        # except with --single-tag and --preserve-tags...
+        minimum_images = args.minimum or 0
+        retention_days = args.days or 0
+    else:
+        # ...  -d and -m are each required
+        minimum_images = int(config["Cleanup"]["Minimum Images"]) if args.minimum is None else args.minimum
+        retention_days = int(config["Cleanup"]["Retention Days"]) if args.days is None else args.days
 
     today = datetime.datetime.today()
 
@@ -320,14 +366,15 @@ if __name__ == "__main__":
             if latest_id:
                 logging.debug("Latest ID: {}".format(latest_id))
 
-            if args.single_tag:
+            if use_image_cache:
                 # load all tags images in cache
                 # to identify later if each used by severals tags
+                logging.warning("loading all images tags in cache...")
                 for tag in tags["tags"]:
                     GRICleaner.get_image(repository, tag)
 
             for tag in list(filtered_tags):
-                if len(filtered_tags) <= minimum_images:
+                if minimum_images > 0 and len(filtered_tags) <= minimum_images:
                     break
 
                 image = GRICleaner.get_image(repository, tag)
@@ -338,7 +385,7 @@ if __name__ == "__main__":
                     created = dateutil.parser.parse(image["created"]).replace(tzinfo=None)
                     diff = today - created
                     logging.debug("Tag {} with image id {} days diff: {}".format(tag, image.get('id', False), diff.days))
-                    if diff.days > retention_days:
+                    if retention_days == 0 or (diff.days > retention_days):
                         logging.warning("- DELETE: {}:{}, Created at {} ({} days ago)".
                                         format(repository,
                                                 tag,
